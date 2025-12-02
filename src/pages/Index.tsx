@@ -1,186 +1,211 @@
-import { useState, useEffect, useRef } from "react";
-import { Camera, Plus, RefreshCw, Home } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { PhotoCard } from "@/components/PhotoCard";
-import { EmptyState } from "@/components/EmptyState";
-import { useToast } from "@/hooks/use-toast";
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { supabase } from '@/integrations/supabase/client';
+import { User } from '@supabase/supabase-js';
+import { ReceiptScanner } from '@/components/ReceiptScanner';
+import { FoodItemCard } from '@/components/FoodItemCard';
+import { Button } from '@/components/ui/button';
+import { useToast } from '@/hooks/use-toast';
+import { LogOut, Bell } from 'lucide-react';
+import { requestNotificationPermission, checkExpiringItems } from '@/utils/notifications';
 
-interface Photo {
+interface ScannedItem {
+  name: string;
+  category: string;
+  expiryDate: Date;
+}
+
+interface FoodItem {
   id: string;
-  src: string;
-  alt: string;
-  timestamp: number;
+  name: string;
+  category: string;
+  purchase_date: string;
+  expiry_date: string;
+  quantity: number;
+  is_consumed: boolean;
 }
 
 const Index = () => {
-  const [photos, setPhotos] = useState<Photo[]>([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [foodItems, setFoodItems] = useState<FoodItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
   const { toast } = useToast();
 
-  // Load photos from localStorage on mount
   useEffect(() => {
-    const savedPhotos = localStorage.getItem("gallery-photos");
-    if (savedPhotos) {
-      try {
-        setPhotos(JSON.parse(savedPhotos));
-      } catch (error) {
-        console.error("Failed to load photos:", error);
-      }
-    }
-  }, []);
-
-  // Save photos to localStorage whenever they change
-  useEffect(() => {
-    if (photos.length > 0) {
-      localStorage.setItem("gallery-photos", JSON.stringify(photos));
-    }
-  }, [photos]);
-
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
-    if (!files || files.length === 0) return;
-
-    Array.from(files).forEach((file) => {
-      if (file.type.startsWith("image/")) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const newPhoto: Photo = {
-            id: `photo-${Date.now()}-${Math.random()}`,
-            src: e.target?.result as string,
-            alt: file.name,
-            timestamp: Date.now(),
-          };
-          setPhotos((prev) => [newPhoto, ...prev]);
-        };
-        reader.readAsDataURL(file);
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setUser(session.user);
+      } else {
+        navigate('/auth');
       }
     });
 
-    toast({
-      title: "Photos added",
-      description: `${files.length} photo(s) uploaded successfully`,
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
+      if (session?.user) {
+        setUser(session.user);
+      } else {
+        navigate('/auth');
+      }
     });
 
-    // Reset input
-    if (event.target) {
-      event.target.value = "";
+    return () => subscription.unsubscribe();
+  }, [navigate]);
+
+  useEffect(() => {
+    if (user) {
+      fetchFoodItems();
+      requestNotificationPermission();
     }
-  };
+  }, [user]);
 
-  const handleDelete = (id: string) => {
-    setPhotos((prev) => prev.filter((photo) => photo.id !== id));
-    toast({
-      title: "Photo deleted",
-      description: "Photo removed from gallery",
-    });
-
-    // Update localStorage after deletion
-    const updatedPhotos = photos.filter((photo) => photo.id !== id);
-    if (updatedPhotos.length === 0) {
-      localStorage.removeItem("gallery-photos");
+  useEffect(() => {
+    if (foodItems.length > 0) {
+      checkExpiringItems(foodItems);
     }
-  };
+  }, [foodItems]);
 
-  const handleRefresh = () => {
-    const savedPhotos = localStorage.getItem("gallery-photos");
-    if (savedPhotos) {
-      setPhotos(JSON.parse(savedPhotos));
+  const fetchFoodItems = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('food_items')
+        .select('*')
+        .order('expiry_date', { ascending: true });
+
+      if (error) throw error;
+      setFoodItems(data || []);
+    } catch (error: any) {
       toast({
-        title: "Gallery refreshed",
-        description: "Photos reloaded from storage",
+        title: 'Error',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleItemsScanned = async (scannedItems: ScannedItem[]) => {
+    try {
+      const itemsToInsert = scannedItems.map(item => ({
+        user_id: user!.id,
+        name: item.name,
+        category: item.category,
+        purchase_date: new Date().toISOString().split('T')[0],
+        expiry_date: item.expiryDate.toISOString().split('T')[0],
+        quantity: 1,
+      }));
+
+      const { error } = await supabase.from('food_items').insert(itemsToInsert);
+      if (error) throw error;
+
+      await fetchFoodItems();
+      toast({
+        title: 'Items added!',
+        description: `${scannedItems.length} items added to your tracker`,
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message,
+        variant: 'destructive',
       });
     }
   };
 
-  const handleUploadClick = () => {
-    fileInputRef.current?.click();
+  const handleDelete = async (id: string) => {
+    try {
+      const { error } = await supabase.from('food_items').delete().eq('id', id);
+      if (error) throw error;
+      setFoodItems(foodItems.filter(item => item.id !== id));
+      toast({ title: 'Item deleted' });
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message,
+        variant: 'destructive',
+      });
+    }
   };
 
-  const handleCameraClick = () => {
-    cameraInputRef.current?.click();
+  const handleToggleConsumed = async (id: string, isConsumed: boolean) => {
+    try {
+      const { error } = await supabase
+        .from('food_items')
+        .update({ is_consumed: isConsumed })
+        .eq('id', id);
+      if (error) throw error;
+      
+      setFoodItems(foodItems.map(item => 
+        item.id === id ? { ...item, is_consumed: isConsumed } : item
+      ));
+      toast({ title: isConsumed ? 'Marked as consumed' : 'Marked as unconsumed' });
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message,
+        variant: 'destructive',
+      });
+    }
   };
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    navigate('/auth');
+  };
+
+  const handleNotificationRequest = async () => {
+    const granted = await requestNotificationPermission();
+    toast({
+      title: granted ? 'Notifications Enabled' : 'Notifications Denied',
+      description: granted 
+        ? 'You will receive alerts for expiring items' 
+        : 'Please enable notifications in browser settings',
+    });
+  };
+
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+  }
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-primary/10 p-2">
-                <Home className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <h1 className="text-xl font-semibold text-foreground">My Gallery</h1>
-                <p className="text-sm text-muted-foreground">
-                  {photos.length} {photos.length === 1 ? "photo" : "photos"}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={handleRefresh}
-                title="Refresh gallery"
-              >
-                <RefreshCw className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={handleCameraClick}
-                title="Take photo"
-                className="hidden sm:flex"
-              >
-                <Camera className="h-4 w-4" />
-              </Button>
-              <Button onClick={handleUploadClick} className="gap-2">
-                <Plus className="h-4 w-4" />
-                <span className="hidden sm:inline">Add Photos</span>
-              </Button>
-            </div>
+    <div className="min-h-screen bg-background p-4">
+      <div className="max-w-4xl mx-auto space-y-6">
+        <div className="flex justify-between items-center">
+          <h1 className="text-3xl font-bold">Expiry Tracker</h1>
+          <div className="flex gap-2">
+            <Button variant="outline" size="icon" onClick={handleNotificationRequest}>
+              <Bell className="w-4 h-4" />
+            </Button>
+            <Button variant="outline" onClick={handleSignOut}>
+              <LogOut className="w-4 h-4 mr-2" />
+              Sign Out
+            </Button>
           </div>
         </div>
-      </header>
 
-      {/* Main Content */}
-      <main className="container mx-auto px-4 py-8">
-        {photos.length === 0 ? (
-          <EmptyState onAddClick={handleUploadClick} />
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 animate-fade-in">
-            {photos.map((photo) => (
-              <PhotoCard
-                key={photo.id}
-                id={photo.id}
-                src={photo.src}
-                alt={photo.alt}
-                onDelete={handleDelete}
-              />
-            ))}
-          </div>
-        )}
-      </main>
+        <ReceiptScanner onItemsScanned={handleItemsScanned} />
 
-      {/* Hidden file inputs */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        multiple
-        className="hidden"
-        onChange={handleFileSelect}
-      />
-      <input
-        ref={cameraInputRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        className="hidden"
-        onChange={handleFileSelect}
-      />
+        <div>
+          <h2 className="text-xl font-semibold mb-4">Your Items ({foodItems.length})</h2>
+          {foodItems.length === 0 ? (
+            <p className="text-center text-muted-foreground py-12">
+              No items yet. Scan a receipt to get started!
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {foodItems.map(item => (
+                <FoodItemCard
+                  key={item.id}
+                  item={item}
+                  onDelete={handleDelete}
+                  onToggleConsumed={handleToggleConsumed}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 };

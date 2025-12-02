@@ -1,88 +1,82 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Modern Minimal Photo Gallery Design System */
+/* Expiry Tracker Design System */
 
 @layer base {
   :root {
-    /* Soft, clean backgrounds */
-    --background: 0 0% 98%;
-    --foreground: 220 10% 20%;
+    /* Clean backgrounds */
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
 
-    /* Cards with subtle elevation */
+    /* Cards */
     --card: 0 0% 100%;
-    --card-foreground: 220 10% 20%;
+    --card-foreground: 240 10% 3.9%;
 
-    /* Popover elements */
+    /* Popover */
     --popover: 0 0% 100%;
-    --popover-foreground: 220 10% 20%;
+    --popover-foreground: 240 10% 3.9%;
 
-    /* Sage green primary accent */
-    --primary: 150 25% 45%;
+    /* Green primary for food/freshness theme */
+    --primary: 142 76% 36%;
     --primary-foreground: 0 0% 100%;
 
-    /* Warm gray secondary */
-    --secondary: 30 10% 92%;
-    --secondary-foreground: 220 10% 20%;
+    /* Secondary */
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
 
-    /* Muted backgrounds and text */
-    --muted: 220 10% 95%;
-    --muted-foreground: 220 8% 50%;
+    /* Muted */
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
 
-    /* Subtle accent color */
-    --accent: 150 20% 90%;
-    --accent-foreground: 150 25% 35%;
+    /* Accent */
+    --accent: 142 76% 36%;
+    --accent-foreground: 0 0% 100%;
 
-    /* Destructive actions */
-    --destructive: 0 70% 50%;
-    --destructive-foreground: 0 0% 100%;
+    /* Destructive */
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
 
     /* Borders and inputs */
-    --border: 220 10% 88%;
-    --input: 220 10% 92%;
-    --ring: 150 25% 45%;
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 142 76% 36%;
 
     /* Rounded corners */
-    --radius: 0.75rem;
-
-    /* Custom design tokens */
-    --shadow-soft: 0 2px 8px -2px hsl(220 10% 20% / 0.08);
-    --shadow-medium: 0 4px 16px -4px hsl(220 10% 20% / 0.12);
-    --shadow-hover: 0 8px 24px -6px hsl(220 10% 20% / 0.16);
-    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --radius: 0.5rem;
   }
 
   .dark {
-    --background: 220 15% 12%;
-    --foreground: 0 0% 95%;
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
 
-    --card: 220 15% 15%;
-    --card-foreground: 0 0% 95%;
+    --card: 240 10% 3.9%;
+    --card-foreground: 0 0% 98%;
 
-    --popover: 220 15% 15%;
-    --popover-foreground: 0 0% 95%;
+    --popover: 240 10% 3.9%;
+    --popover-foreground: 0 0% 98%;
 
-    --primary: 150 30% 50%;
-    --primary-foreground: 220 15% 12%;
+    --primary: 142 76% 36%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 220 15% 20%;
-    --secondary-foreground: 0 0% 95%;
+    --secondary: 240 3.7% 15.9%;
+    --secondary-foreground: 0 0% 98%;
 
-    --muted: 220 15% 18%;
-    --muted-foreground: 220 8% 60%;
+    --muted: 240 3.7% 15.9%;
+    --muted-foreground: 240 5% 64.9%;
 
-    --accent: 150 25% 25%;
-    --accent-foreground: 150 30% 85%;
+    --accent: 142 76% 36%;
+    --accent-foreground: 0 0% 100%;
 
-    --destructive: 0 65% 45%;
-    --destructive-foreground: 0 0% 100%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
 
-    --border: 220 15% 25%;
-    --input: 220 15% 20%;
-    --ring: 150 30% 50%;
+    --border: 240 3.7% 15.9%;
+    --input: 240 3.7% 15.9%;
+    --ring: 142 76% 36%;
   }
 }
 
@@ -92,28 +86,10 @@
   }
 
   body {
-    @apply bg-background text-foreground font-['Outfit'];
-  }
-
-  h1, h2, h3, h4, h5, h6 {
-    @apply font-['Outfit'];
+    @apply bg-background text-foreground;
   }
 }
 
 @layer utilities {
-  .shadow-soft {
-    box-shadow: var(--shadow-soft);
-  }
-  
-  .shadow-medium {
-    box-shadow: var(--shadow-medium);
-  }
-  
-  .shadow-hover {
-    box-shadow: var(--shadow-hover);
-  }
-  
-  .transition-smooth {
-    transition: var(--transition-smooth);
-  }
+  /* Add any custom utilities here if needed */
 }

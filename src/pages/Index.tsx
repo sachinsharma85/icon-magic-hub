@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { User } from '@supabase/supabase-js';
 import { ReceiptScanner } from '@/components/ReceiptScanner';
+import { ManualItemForm } from '@/components/ManualItemForm';
+import { AnalyticsDashboard } from '@/components/AnalyticsDashboard';
 import { FoodItemCard } from '@/components/FoodItemCard';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -13,6 +15,7 @@ interface ScannedItem {
   name: string;
   category: string;
   expiryDate: Date;
+  quantity?: number;
 }
 
 interface FoodItem {
@@ -93,7 +96,7 @@ const Index = () => {
         category: item.category,
         purchase_date: new Date().toISOString().split('T')[0],
         expiry_date: item.expiryDate.toISOString().split('T')[0],
-        quantity: 1,
+        quantity: item.quantity || 1,
       }));
 
       const { error } = await supabase.from('food_items').insert(itemsToInsert);
@@ -102,7 +105,7 @@ const Index = () => {
       await fetchFoodItems();
       toast({
         title: 'Items added!',
-        description: `${scannedItems.length} items added to your tracker`,
+        description: `${scannedItems.length} item(s) added to your tracker`,
       });
     } catch (error: any) {
       toast({
@@ -111,6 +114,10 @@ const Index = () => {
         variant: 'destructive',
       });
     }
+  };
+
+  const handleManualItemAdded = async (item: ScannedItem) => {
+    await handleItemsScanned([item]);
   };
 
   const handleDelete = async (id: string) => {
@@ -186,11 +193,15 @@ const Index = () => {
 
         <ReceiptScanner onItemsScanned={handleItemsScanned} />
 
+        <ManualItemForm onItemAdded={handleManualItemAdded} />
+
+        <AnalyticsDashboard items={foodItems} />
+
         <div>
           <h2 className="text-xl font-semibold mb-4">Your Items ({foodItems.length})</h2>
           {foodItems.length === 0 ? (
             <p className="text-center text-muted-foreground py-12">
-              No items yet. Scan a receipt to get started!
+              No items yet. Scan a receipt or add items manually!
             </p>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

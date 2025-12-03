@@ -5,6 +5,7 @@ import { User } from '@supabase/supabase-js';
 import { ReceiptScanner } from '@/components/ReceiptScanner';
 import { ManualItemForm } from '@/components/ManualItemForm';
 import { AnalyticsDashboard } from '@/components/AnalyticsDashboard';
+import { InventoryManagement } from '@/components/InventoryManagement';
 import { FoodItemCard } from '@/components/FoodItemCard';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -196,6 +197,8 @@ const Index = () => {
         <ManualItemForm onItemAdded={handleManualItemAdded} />
 
         <AnalyticsDashboard items={foodItems} />
+
+        <InventoryManagement items={foodItems} />
 
         <div>
           <h2 className="text-xl font-semibold mb-4">Your Items ({foodItems.length})</h2>

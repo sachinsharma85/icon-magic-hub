@@ -56,57 +56,57 @@ export const AnalyticsDashboard = ({ items }: AnalyticsDashboardProps) => {
       </h2>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Card>
+        <Card className="bg-blue-500 border-blue-600">
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-primary/10">
-                <Package className="w-5 h-5 text-primary" />
+              <div className="p-2 rounded-lg bg-white/20">
+                <Package className="w-5 h-5 text-white" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{stats.total}</p>
-                <p className="text-xs text-muted-foreground">Total Items</p>
+                <p className="text-2xl font-bold text-white">{stats.total}</p>
+                <p className="text-xs text-blue-100">Total Items</p>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="bg-green-500 border-green-600">
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-yellow-500/10">
-                <AlertTriangle className="w-5 h-5 text-yellow-500" />
+              <div className="p-2 rounded-lg bg-white/20">
+                <CheckCircle className="w-5 h-5 text-white" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{stats.expiringSoon}</p>
-                <p className="text-xs text-muted-foreground">Expiring Soon</p>
+                <p className="text-2xl font-bold text-white">{stats.fresh}</p>
+                <p className="text-xs text-green-100">Active Items</p>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="bg-orange-500 border-orange-600">
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-green-500/10">
-                <CheckCircle className="w-5 h-5 text-green-500" />
+              <div className="p-2 rounded-lg bg-white/20">
+                <AlertTriangle className="w-5 h-5 text-white" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{stats.consumed}</p>
-                <p className="text-xs text-muted-foreground">Consumed</p>
+                <p className="text-2xl font-bold text-white">{stats.expiringSoon}</p>
+                <p className="text-xs text-orange-100">Expiring Soon</p>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="bg-red-500 border-red-600">
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-destructive/10">
-                <XCircle className="w-5 h-5 text-destructive" />
+              <div className="p-2 rounded-lg bg-white/20">
+                <XCircle className="w-5 h-5 text-white" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{stats.expired}</p>
-                <p className="text-xs text-muted-foreground">Expired</p>
+                <p className="text-2xl font-bold text-white">{stats.expired}</p>
+                <p className="text-xs text-red-100">Expired</p>
               </div>
             </div>
           </CardContent>

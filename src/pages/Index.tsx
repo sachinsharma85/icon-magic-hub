@@ -10,7 +10,7 @@ import { InventoryManagement } from '@/components/InventoryManagement';
 import { FoodItemCard } from '@/components/FoodItemCard';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { LogOut, Bell, Plus, ScanLine } from 'lucide-react';
+import { LogOut, Bell, Plus, ScanLine, Settings } from 'lucide-react';
 import { requestNotificationPermission, checkExpiringItems } from '@/utils/notifications';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
@@ -194,6 +194,9 @@ const Index = () => {
           <div className="flex gap-2">
             <Button variant="outline" size="icon" onClick={handleNotificationRequest}>
               <Bell className="w-4 h-4" />
+            </Button>
+            <Button variant="outline" size="icon" onClick={() => navigate('/settings')}>
+              <Settings className="w-4 h-4" />
             </Button>
             <Button variant="outline" onClick={handleSignOut}>
               <LogOut className="w-4 h-4 mr-2" />

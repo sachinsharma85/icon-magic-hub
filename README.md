@@ -1,8 +1,8 @@
-# Welcome to your  project
+# Welcome to your lovable project
 
 ## Project info
 
-**URL**: https://sachin.dev/projects/6a937950-5ea9-49f8-805b-983027cd211d
+**URL**: https:// lovable.dev/projects/6a937950-5ea9-49f8-805b-983027cd211d
 
 ## How can I edit this code?
 
@@ -10,7 +10,7 @@ There are several ways of editing your application.
 
 **Use Lovable**
 
-Simply visit the [Lovable Project](https://sachin.dev/projects/6a937950-5ea9-49f8-805b-983027cd211d) and start prompting.
+Simply visit the [Lovable Project](https:// lovable.dev/projects/6a937950-5ea9-49f8-805b-983027cd211d) and start prompting.
 
 Changes made via Lovable will be committed automatically to this repo.
 
@@ -62,7 +62,7 @@ This project is built with:
 
 ## How can I deploy this project?
 
-Simply open [sachin](https://sachin.dev/projects/6a937950-5ea9-49f8-805b-983027cd211d) and click on Share -> Publish.
+Simply open [ lovable](https:// lovable.dev/projects/6a937950-5ea9-49f8-805b-983027cd211d) and click on Share -> Publish.
 
 ## Can I connect a custom domain to my Lovable project?
 
@@ -70,4 +70,4 @@ Yes, you can!
 
 To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
 
-Read more here: [Setting up a custom domain](https://docs.sachin.dev/features/custom-domain#custom-domain)
+Read more here: [Setting up a custom domain](https://docs. lovable.dev/features/custom-domain#custom-domain)

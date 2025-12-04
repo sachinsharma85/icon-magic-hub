@@ -1,6 +1,8 @@
 import { useState, useMemo } from 'react';
 import { differenceInDays, format, parseISO } from 'date-fns';
-import { Search, Filter, TrendingUp, Shield, AlertTriangle, RotateCw, Calendar } from 'lucide-react';
+import { Search, Filter, TrendingUp, Shield, AlertTriangle, RotateCw, Calendar, Download, FileText } from 'lucide-react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -103,6 +105,73 @@ export const InventoryManagement = ({ items }: InventoryManagementProps) => {
       default:
         return <Badge>Unknown</Badge>;
     }
+  };
+
+  const getStatusText = (item: FoodItem) => {
+    const status = getItemStatus(item);
+    switch (status) {
+      case 'fresh': return 'Fresh';
+      case 'expiring': return 'Expiring Soon';
+      case 'expired': return 'Expired';
+      case 'consumed': return 'Consumed';
+      default: return 'Unknown';
+    }
+  };
+
+  const exportToCSV = () => {
+    const headers = ['Item Name', 'Category', 'Status', 'Quantity', 'Purchase Date', 'Expiry Date'];
+    const rows = filteredItems.map(item => [
+      item.name,
+      item.category || 'N/A',
+      getStatusText(item),
+      item.quantity.toString(),
+      format(parseISO(item.purchase_date), 'yyyy-MM-dd'),
+      format(parseISO(item.expiry_date), 'yyyy-MM-dd')
+    ]);
+    
+    const csvContent = [headers, ...rows].map(row => row.join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `inventory-report-${format(new Date(), 'yyyy-MM-dd')}.csv`;
+    link.click();
+  };
+
+  const exportToPDF = () => {
+    const doc = new jsPDF();
+    
+    doc.setFontSize(18);
+    doc.text('Inventory Report', 14, 22);
+    doc.setFontSize(11);
+    doc.text(`Generated: ${format(new Date(), 'MMM d, yyyy HH:mm')}`, 14, 30);
+    
+    // Health metrics summary
+    doc.setFontSize(12);
+    doc.text('Health Metrics:', 14, 42);
+    doc.setFontSize(10);
+    doc.text(`Stock Coverage: ${healthMetrics.stockCoverage}%`, 14, 50);
+    doc.text(`Expiry Ratio: ${healthMetrics.expiryRatio}%`, 14, 56);
+    doc.text(`Value at Risk: ${healthMetrics.valueAtRisk}%`, 14, 62);
+    doc.text(`Stock Turnover: ${healthMetrics.stockTurnover}`, 14, 68);
+    
+    const tableData = filteredItems.map(item => [
+      item.name,
+      item.category || 'N/A',
+      getStatusText(item),
+      item.quantity.toString(),
+      format(parseISO(item.purchase_date), 'MMM d, yyyy'),
+      format(parseISO(item.expiry_date), 'MMM d, yyyy')
+    ]);
+    
+    autoTable(doc, {
+      startY: 76,
+      head: [['Item Name', 'Category', 'Status', 'Qty', 'Purchase Date', 'Expiry Date']],
+      body: tableData,
+      styles: { fontSize: 8 },
+      headStyles: { fillColor: [59, 130, 246] }
+    });
+    
+    doc.save(`inventory-report-${format(new Date(), 'yyyy-MM-dd')}.pdf`);
   };
 
   if (items.length === 0) return null;
@@ -249,10 +318,22 @@ export const InventoryManagement = ({ items }: InventoryManagementProps) => {
       {/* Inventory Table */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Calendar className="w-5 h-5" />
-            Inventory Report ({filteredItems.length} items)
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Calendar className="w-5 h-5" />
+              Inventory Report ({filteredItems.length} items)
+            </CardTitle>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={exportToCSV}>
+                <Download className="w-4 h-4 mr-2" />
+                CSV
+              </Button>
+              <Button variant="outline" size="sm" onClick={exportToPDF}>
+                <FileText className="w-4 h-4 mr-2" />
+                PDF
+              </Button>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="rounded-md border overflow-x-auto">

@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { differenceInDays, format, parseISO } from 'date-fns';
-import { Search, Filter, TrendingUp, Shield, AlertTriangle, RotateCw, Calendar, Download, FileText } from 'lucide-react';
+import { Search, Filter, TrendingUp, Shield, AlertTriangle, RotateCw, Calendar, Download, FileText, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -24,11 +24,17 @@ interface InventoryManagementProps {
   items: FoodItem[];
 }
 
+type SortField = 'name' | 'category' | 'status' | 'quantity' | 'purchase_date' | 'expiry_date';
+type SortDirection = 'asc' | 'desc';
+
 export const InventoryManagement = ({ items }: InventoryManagementProps) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [stockFilter, setStockFilter] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState<string>('all');
+  const [sortField, setSortField] = useState<SortField>('expiry_date');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
   const today = new Date();
 
@@ -40,8 +46,24 @@ export const InventoryManagement = ({ items }: InventoryManagementProps) => {
     return 'fresh';
   };
 
-  const filteredItems = useMemo(() => {
-    return items.filter(item => {
+  const getStatusPriority = (status: string) => {
+    switch (status) {
+      case 'expired': return 1;
+      case 'expiring': return 2;
+      case 'fresh': return 3;
+      case 'consumed': return 4;
+      default: return 5;
+    }
+  };
+
+  // Get unique categories
+  const categories = useMemo(() => {
+    const cats = new Set(items.map(i => i.category).filter(Boolean));
+    return Array.from(cats).sort();
+  }, [items]);
+
+  const filteredAndSortedItems = useMemo(() => {
+    let result = items.filter(item => {
       // Search filter
       if (searchTerm && !item.name.toLowerCase().includes(searchTerm.toLowerCase())) {
         return false;
@@ -50,6 +72,11 @@ export const InventoryManagement = ({ items }: InventoryManagementProps) => {
       // Status filter
       const status = getItemStatus(item);
       if (statusFilter !== 'all' && status !== statusFilter) {
+        return false;
+      }
+
+      // Category filter
+      if (categoryFilter !== 'all' && item.category !== categoryFilter) {
         return false;
       }
 
@@ -68,7 +95,37 @@ export const InventoryManagement = ({ items }: InventoryManagementProps) => {
 
       return true;
     });
-  }, [items, searchTerm, statusFilter, stockFilter, dateFilter]);
+
+    // Sort
+    result.sort((a, b) => {
+      let comparison = 0;
+      
+      switch (sortField) {
+        case 'name':
+          comparison = a.name.localeCompare(b.name);
+          break;
+        case 'category':
+          comparison = (a.category || '').localeCompare(b.category || '');
+          break;
+        case 'status':
+          comparison = getStatusPriority(getItemStatus(a)) - getStatusPriority(getItemStatus(b));
+          break;
+        case 'quantity':
+          comparison = a.quantity - b.quantity;
+          break;
+        case 'purchase_date':
+          comparison = new Date(a.purchase_date).getTime() - new Date(b.purchase_date).getTime();
+          break;
+        case 'expiry_date':
+          comparison = new Date(a.expiry_date).getTime() - new Date(b.expiry_date).getTime();
+          break;
+      }
+
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+
+    return result;
+  }, [items, searchTerm, statusFilter, categoryFilter, stockFilter, dateFilter, sortField, sortDirection]);
 
   // Health metrics calculations
   const healthMetrics = useMemo(() => {
@@ -95,13 +152,13 @@ export const InventoryManagement = ({ items }: InventoryManagementProps) => {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'fresh':
-        return <Badge className="bg-green-500 hover:bg-green-600">Fresh</Badge>;
+        return <Badge className="bg-emerald-500 hover:bg-emerald-600 text-white font-medium">🟢 Safe</Badge>;
       case 'expiring':
-        return <Badge className="bg-orange-500 hover:bg-orange-600">Expiring Soon</Badge>;
+        return <Badge className="bg-amber-500 hover:bg-amber-600 text-white font-medium">🟠 Expiring Soon</Badge>;
       case 'expired':
-        return <Badge className="bg-red-500 hover:bg-red-600">Expired</Badge>;
+        return <Badge className="bg-red-500 hover:bg-red-600 text-white font-medium">🔴 Expired</Badge>;
       case 'consumed':
-        return <Badge className="bg-gray-500 hover:bg-gray-600">Consumed</Badge>;
+        return <Badge className="bg-slate-500 hover:bg-slate-600 text-white font-medium">✓ Consumed</Badge>;
       default:
         return <Badge>Unknown</Badge>;
     }
@@ -110,7 +167,7 @@ export const InventoryManagement = ({ items }: InventoryManagementProps) => {
   const getStatusText = (item: FoodItem) => {
     const status = getItemStatus(item);
     switch (status) {
-      case 'fresh': return 'Fresh';
+      case 'fresh': return 'Safe';
       case 'expiring': return 'Expiring Soon';
       case 'expired': return 'Expired';
       case 'consumed': return 'Consumed';
@@ -118,9 +175,25 @@ export const InventoryManagement = ({ items }: InventoryManagementProps) => {
     }
   };
 
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  const getSortIcon = (field: SortField) => {
+    if (sortField !== field) return <ArrowUpDown className="w-4 h-4 ml-1 text-muted-foreground" />;
+    return sortDirection === 'asc' 
+      ? <ArrowUp className="w-4 h-4 ml-1 text-primary" />
+      : <ArrowDown className="w-4 h-4 ml-1 text-primary" />;
+  };
+
   const exportToCSV = () => {
-    const headers = ['Item Name', 'Category', 'Status', 'Quantity', 'Purchase Date', 'Expiry Date'];
-    const rows = filteredItems.map(item => [
+    const headers = ['Item Name', 'Category', 'Status', 'Quantity', 'Manufacture Date', 'Expiry Date'];
+    const rows = filteredAndSortedItems.map(item => [
       item.name,
       item.category || 'N/A',
       getStatusText(item),
@@ -154,7 +227,7 @@ export const InventoryManagement = ({ items }: InventoryManagementProps) => {
     doc.text(`Value at Risk: ${healthMetrics.valueAtRisk}%`, 14, 62);
     doc.text(`Stock Turnover: ${healthMetrics.stockTurnover}`, 14, 68);
     
-    const tableData = filteredItems.map(item => [
+    const tableData = filteredAndSortedItems.map(item => [
       item.name,
       item.category || 'N/A',
       getStatusText(item),
@@ -165,7 +238,7 @@ export const InventoryManagement = ({ items }: InventoryManagementProps) => {
     
     autoTable(doc, {
       startY: 76,
-      head: [['Item Name', 'Category', 'Status', 'Qty', 'Purchase Date', 'Expiry Date']],
+      head: [['Item Name', 'Category', 'Status', 'Qty', 'Mfg Date', 'Expiry Date']],
       body: tableData,
       styles: { fontSize: 8 },
       headStyles: { fillColor: [59, 130, 246] }
@@ -252,8 +325,8 @@ export const InventoryManagement = ({ items }: InventoryManagementProps) => {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
-            <div className="relative">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-3">
+            <div className="relative lg:col-span-2">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
                 placeholder="Search items..."
@@ -269,10 +342,22 @@ export const InventoryManagement = ({ items }: InventoryManagementProps) => {
               </SelectTrigger>
               <SelectContent className="bg-background border">
                 <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="fresh">Fresh</SelectItem>
-                <SelectItem value="expiring">Expiring Soon</SelectItem>
-                <SelectItem value="expired">Expired</SelectItem>
-                <SelectItem value="consumed">Consumed</SelectItem>
+                <SelectItem value="fresh">🟢 Safe</SelectItem>
+                <SelectItem value="expiring">🟠 Expiring Soon</SelectItem>
+                <SelectItem value="expired">🔴 Expired</SelectItem>
+                <SelectItem value="consumed">✓ Consumed</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <SelectTrigger>
+                <SelectValue placeholder="Category" />
+              </SelectTrigger>
+              <SelectContent className="bg-background border">
+                <SelectItem value="all">All Categories</SelectItem>
+                {categories.map(cat => (
+                  <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
 
@@ -288,28 +373,17 @@ export const InventoryManagement = ({ items }: InventoryManagementProps) => {
               </SelectContent>
             </Select>
 
-            <Select value={dateFilter} onValueChange={setDateFilter}>
-              <SelectTrigger>
-                <SelectValue placeholder="Date Range" />
-              </SelectTrigger>
-              <SelectContent className="bg-background border">
-                <SelectItem value="all">All Dates</SelectItem>
-                <SelectItem value="week">Last 7 Days</SelectItem>
-                <SelectItem value="month">Last 30 Days</SelectItem>
-                <SelectItem value="quarter">Last 90 Days</SelectItem>
-              </SelectContent>
-            </Select>
-
             <Button 
               variant="outline" 
               onClick={() => {
                 setSearchTerm('');
                 setStatusFilter('all');
+                setCategoryFilter('all');
                 setStockFilter('all');
                 setDateFilter('all');
               }}
             >
-              Clear Filters
+              Clear All
             </Button>
           </div>
         </CardContent>
@@ -318,10 +392,10 @@ export const InventoryManagement = ({ items }: InventoryManagementProps) => {
       {/* Inventory Table */}
       <Card>
         <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-2">
             <CardTitle className="text-lg flex items-center gap-2">
               <Calendar className="w-5 h-5" />
-              Inventory Report ({filteredItems.length} items)
+              Inventory Report ({filteredAndSortedItems.length} items)
             </CardTitle>
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={exportToCSV}>
@@ -339,33 +413,90 @@ export const InventoryManagement = ({ items }: InventoryManagementProps) => {
           <div className="rounded-md border overflow-x-auto">
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>Item Name</TableHead>
-                  <TableHead>Category</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Quantity</TableHead>
-                  <TableHead>Purchase Date</TableHead>
-                  <TableHead>Expiry Date</TableHead>
+                <TableRow className="bg-muted/50">
+                  <TableHead 
+                    className="cursor-pointer hover:bg-muted transition-colors"
+                    onClick={() => handleSort('name')}
+                  >
+                    <div className="flex items-center">
+                      Item Name {getSortIcon('name')}
+                    </div>
+                  </TableHead>
+                  <TableHead 
+                    className="cursor-pointer hover:bg-muted transition-colors"
+                    onClick={() => handleSort('category')}
+                  >
+                    <div className="flex items-center">
+                      Category {getSortIcon('category')}
+                    </div>
+                  </TableHead>
+                  <TableHead 
+                    className="cursor-pointer hover:bg-muted transition-colors"
+                    onClick={() => handleSort('status')}
+                  >
+                    <div className="flex items-center">
+                      Status {getSortIcon('status')}
+                    </div>
+                  </TableHead>
+                  <TableHead 
+                    className="cursor-pointer hover:bg-muted transition-colors"
+                    onClick={() => handleSort('quantity')}
+                  >
+                    <div className="flex items-center">
+                      Qty {getSortIcon('quantity')}
+                    </div>
+                  </TableHead>
+                  <TableHead 
+                    className="cursor-pointer hover:bg-muted transition-colors"
+                    onClick={() => handleSort('purchase_date')}
+                  >
+                    <div className="flex items-center">
+                      Mfg Date {getSortIcon('purchase_date')}
+                    </div>
+                  </TableHead>
+                  <TableHead 
+                    className="cursor-pointer hover:bg-muted transition-colors"
+                    onClick={() => handleSort('expiry_date')}
+                  >
+                    <div className="flex items-center">
+                      Expiry Date {getSortIcon('expiry_date')}
+                    </div>
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredItems.length === 0 ? (
+                {filteredAndSortedItems.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
                       No items match your filters
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredItems.map(item => (
-                    <TableRow key={item.id}>
-                      <TableCell className="font-medium">{item.name}</TableCell>
-                      <TableCell>{item.category || 'N/A'}</TableCell>
-                      <TableCell>{getStatusBadge(getItemStatus(item))}</TableCell>
-                      <TableCell>{item.quantity}</TableCell>
-                      <TableCell>{format(parseISO(item.purchase_date), 'MMM d, yyyy')}</TableCell>
-                      <TableCell>{format(parseISO(item.expiry_date), 'MMM d, yyyy')}</TableCell>
-                    </TableRow>
-                  ))
+                  filteredAndSortedItems.map(item => {
+                    const status = getItemStatus(item);
+                    return (
+                      <TableRow 
+                        key={item.id}
+                        className={`
+                          ${status === 'expired' ? 'bg-red-50 dark:bg-red-950/20' : ''}
+                          ${status === 'expiring' ? 'bg-amber-50 dark:bg-amber-950/20' : ''}
+                          ${status === 'fresh' ? 'bg-emerald-50 dark:bg-emerald-950/20' : ''}
+                          ${status === 'consumed' ? 'bg-slate-50 dark:bg-slate-950/20 opacity-60' : ''}
+                        `}
+                      >
+                        <TableCell className="font-medium">{item.name}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{item.category || 'N/A'}</Badge>
+                        </TableCell>
+                        <TableCell>{getStatusBadge(status)}</TableCell>
+                        <TableCell className="font-medium">{item.quantity}</TableCell>
+                        <TableCell>{format(parseISO(item.purchase_date), 'MMM d, yyyy')}</TableCell>
+                        <TableCell className={status === 'expired' ? 'text-red-600 font-medium' : ''}>
+                          {format(parseISO(item.expiry_date), 'MMM d, yyyy')}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
                 )}
               </TableBody>
             </Table>

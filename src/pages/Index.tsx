@@ -4,15 +4,17 @@ import { supabase } from '@/integrations/supabase/client';
 import { User } from '@supabase/supabase-js';
 import { ReceiptScanner } from '@/components/ReceiptScanner';
 import { ManualItemForm } from '@/components/ManualItemForm';
+import { QRScanner } from '@/components/QRScanner';
 import { WelcomeBanner } from '@/components/WelcomeBanner';
 import { ExpiryCharts } from '@/components/ExpiryCharts';
 import { InventoryManagement } from '@/components/InventoryManagement';
 import { FoodItemCard } from '@/components/FoodItemCard';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { LogOut, Bell, Plus, ScanLine, Settings } from 'lucide-react';
+import { LogOut, Bell, Plus, ScanLine, Settings, QrCode, Package } from 'lucide-react';
 import { requestNotificationPermission, checkExpiringItems } from '@/utils/notifications';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { calculateExpiryDate } from '@/utils/expiryRules';
 
 interface ScannedItem {
   name: string;
@@ -123,6 +125,42 @@ const Index = () => {
     await handleItemsScanned([item]);
   };
 
+  const handleQRScanSuccess = async (data: {
+    name: string;
+    category: string;
+    expiryDate?: Date;
+    quantity: number;
+    manufacturingDate?: Date;
+  }) => {
+    try {
+      const expiryDate = data.expiryDate || calculateExpiryDate(data.name);
+      const mfgDate = data.manufacturingDate || new Date();
+      
+      const { error } = await supabase.from('food_items').insert({
+        user_id: user!.id,
+        name: data.name,
+        category: data.category,
+        purchase_date: mfgDate.toISOString().split('T')[0],
+        expiry_date: expiryDate.toISOString().split('T')[0],
+        quantity: data.quantity,
+      });
+      
+      if (error) throw error;
+      
+      await fetchFoodItems();
+      toast({
+        title: 'Item added from QR!',
+        description: `${data.name} added to your tracker`,
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message,
+        variant: 'destructive',
+      });
+    }
+  };
+
   const handleDelete = async (id: string) => {
     try {
       const { error } = await supabase.from('food_items').delete().eq('id', id);
@@ -212,20 +250,27 @@ const Index = () => {
 
         {/* Add Items Section */}
         <Tabs defaultValue="manual" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 max-w-md">
+          <TabsList className="grid w-full grid-cols-3 max-w-lg">
             <TabsTrigger value="manual" className="flex items-center gap-2">
               <Plus className="w-4 h-4" />
-              Add Manually
+              Manual
             </TabsTrigger>
-            <TabsTrigger value="scan" className="flex items-center gap-2">
+            <TabsTrigger value="qr" className="flex items-center gap-2">
+              <QrCode className="w-4 h-4" />
+              QR Scan
+            </TabsTrigger>
+            <TabsTrigger value="receipt" className="flex items-center gap-2">
               <ScanLine className="w-4 h-4" />
-              Scan Receipt
+              Receipt
             </TabsTrigger>
           </TabsList>
           <TabsContent value="manual" className="mt-4">
             <ManualItemForm onItemAdded={handleManualItemAdded} />
           </TabsContent>
-          <TabsContent value="scan" className="mt-4">
+          <TabsContent value="qr" className="mt-4">
+            <QRScanner onScanSuccess={handleQRScanSuccess} />
+          </TabsContent>
+          <TabsContent value="receipt" className="mt-4">
             <ReceiptScanner onItemsScanned={handleItemsScanned} />
           </TabsContent>
         </Tabs>
@@ -263,8 +308,5 @@ const Index = () => {
     </div>
   );
 };
-
-// Import Package icon for empty state
-import { Package } from 'lucide-react';
 
 export default Index;

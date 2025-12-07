@@ -1,50 +1,64 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { Camera, Leaf, Thermometer, Droplets, Package, AlertTriangle, Clock, Calendar, Info, X, ScanLine, QrCode, Upload, ImageIcon } from 'lucide-react';
-import { Html5Qrcode } from 'html5-qrcode';
+import { Camera, Leaf, Clock, Calendar, Info, X, ScanLine, Upload, ImageIcon, Bell } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Slider } from '@/components/ui/slider';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { produceDatabase, predictRotDate, StorageConditions, RotPrediction } from '@/utils/rotPrediction';
+import { produceDatabase, predictRotDate, RotPrediction } from '@/utils/rotPrediction';
+import { requestNotificationPermission, showNotification } from '@/utils/notifications';
 import { format } from 'date-fns';
+
+// Default storage conditions for automatic prediction
+const DEFAULT_CONDITIONS = {
+  temperature: 20,
+  humidity: 60,
+  packaging: 'none' as const,
+  damage: 'none' as const,
+  ripeness: 'ripe' as const,
+};
 
 export default function ProduceScanner() {
   const [cameraActive, setCameraActive] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [selectedProduce, setSelectedProduce] = useState<string>('');
-  const [conditions, setConditions] = useState<StorageConditions>({
-    temperature: 20,
-    humidity: 60,
-    packaging: 'none',
-    damage: 'none',
-    ripeness: 'ripe',
-  });
   const [prediction, setPrediction] = useState<RotPrediction | null>(null);
-  const [isQrScanning, setIsQrScanning] = useState(false);
-  const [qrDetected, setQrDetected] = useState<string | null>(null);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const qrScannerRef = useRef<Html5Qrcode | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
-  // Auto-start camera on mount
+  // Auto-start camera on mount and check notification permission
   useEffect(() => {
     startCamera();
+    checkNotificationPermission();
     
     return () => {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
       }
-      if (qrScannerRef.current?.isScanning) {
-        qrScannerRef.current.stop().catch(console.error);
-      }
     };
   }, []);
+
+  const checkNotificationPermission = async () => {
+    if ('Notification' in window && Notification.permission === 'granted') {
+      setNotificationsEnabled(true);
+    }
+  };
+
+  const enableNotifications = async () => {
+    const granted = await requestNotificationPermission();
+    setNotificationsEnabled(granted);
+    if (granted) {
+      toast({
+        title: 'Notifications Enabled',
+        description: 'You will receive expiry reminders for your produce.',
+      });
+    }
+  };
 
   const startCamera = useCallback(async () => {
     try {
@@ -86,7 +100,7 @@ export default function ProduceScanner() {
         stopCamera();
         toast({
           title: 'Photo Captured!',
-          description: 'Now select the produce type and storage conditions.',
+          description: 'Now select the produce type.',
         });
       }
     }
@@ -100,7 +114,7 @@ export default function ProduceScanner() {
         setCapturedImage(e.target?.result as string);
         toast({
           title: 'Image Uploaded!',
-          description: 'Now select the produce type and storage conditions.',
+          description: 'Now select the produce type.',
         });
       };
       reader.readAsDataURL(file);
@@ -110,75 +124,23 @@ export default function ProduceScanner() {
   const resetCapture = () => {
     setCapturedImage(null);
     setPrediction(null);
-    setQrDetected(null);
-  };
-
-  // QR Code Scanning
-  const startQrScanning = async () => {
-    try {
-      const html5QrCode = new Html5Qrcode('qr-reader-produce');
-      qrScannerRef.current = html5QrCode;
-
-      await html5QrCode.start(
-        { facingMode: 'environment' },
-        {
-          fps: 10,
-          qrbox: { width: 250, height: 250 },
-        },
-        (decodedText) => {
-          handleQrSuccess(decodedText);
-        },
-        () => {}
-      );
-
-      setIsQrScanning(true);
-    } catch (err: any) {
-      console.error('QR Scanner error:', err);
-      toast({
-        title: 'Camera Error',
-        description: err.message || 'Unable to access camera.',
-        variant: 'destructive',
-      });
-    }
-  };
-
-  const stopQrScanning = async () => {
-    if (qrScannerRef.current?.isScanning) {
-      await qrScannerRef.current.stop();
-      qrScannerRef.current = null;
-    }
-    setIsQrScanning(false);
-  };
-
-  const handleQrSuccess = async (decodedText: string) => {
-    await stopQrScanning();
-    setQrDetected(decodedText);
-    
-    // Try to auto-detect produce from QR
-    const lowerText = decodedText.toLowerCase();
-    const matchedProduce = Object.keys(produceDatabase).find(key => 
-      lowerText.includes(key) || lowerText.includes(produceDatabase[key].name.toLowerCase())
-    );
-    
-    if (matchedProduce) {
-      setSelectedProduce(matchedProduce);
-      toast({
-        title: 'Produce Detected!',
-        description: `Detected: ${produceDatabase[matchedProduce].name}`,
-      });
-    } else {
-      toast({
-        title: 'QR Scanned',
-        description: 'Please select the produce type manually.',
-      });
-    }
+    setSelectedProduce('');
   };
 
   const calculatePrediction = () => {
     if (!selectedProduce) return;
     try {
-      const result = predictRotDate(selectedProduce, conditions);
+      const result = predictRotDate(selectedProduce, DEFAULT_CONDITIONS);
       setPrediction(result);
+      
+      // Send notification if enabled
+      if (notificationsEnabled && result.daysLeft <= 3) {
+        const produce = produceDatabase[selectedProduce];
+        showNotification(
+          `${produce.name} Expiring Soon!`,
+          `Your ${produce.name} will expire in ${result.daysLeft} day${result.daysLeft !== 1 ? 's' : ''} (${format(result.rotDate, 'MMM dd, yyyy')})`
+        );
+      }
     } catch (error) {
       console.error('Prediction error:', error);
     }
@@ -209,6 +171,20 @@ export default function ProduceScanner() {
           <p className="text-muted-foreground">
             Scan your fruits & vegetables to predict their shelf life
           </p>
+          
+          {/* Notification Toggle */}
+          {!notificationsEnabled && (
+            <Button variant="outline" size="sm" onClick={enableNotifications} className="mt-2">
+              <Bell className="h-4 w-4 mr-2" />
+              Enable Expiry Notifications
+            </Button>
+          )}
+          {notificationsEnabled && (
+            <Badge variant="secondary" className="mt-2">
+              <Bell className="h-3 w-3 mr-1" />
+              Notifications Enabled
+            </Badge>
+          )}
         </div>
 
         <div className="grid md:grid-cols-2 gap-6">
@@ -222,18 +198,14 @@ export default function ProduceScanner() {
             </CardHeader>
             <CardContent className="p-4 space-y-4">
               <Tabs defaultValue="photo" className="w-full">
-                <TabsList className="grid w-full grid-cols-3">
+                <TabsList className="grid w-full grid-cols-2">
                   <TabsTrigger value="photo" className="flex items-center gap-1">
                     <ImageIcon className="h-4 w-4" />
-                    <span className="hidden sm:inline">Photo</span>
-                  </TabsTrigger>
-                  <TabsTrigger value="qr" className="flex items-center gap-1">
-                    <QrCode className="h-4 w-4" />
-                    <span className="hidden sm:inline">QR</span>
+                    Photo
                   </TabsTrigger>
                   <TabsTrigger value="upload" className="flex items-center gap-1">
                     <Upload className="h-4 w-4" />
-                    <span className="hidden sm:inline">Upload</span>
+                    Upload
                   </TabsTrigger>
                 </TabsList>
 
@@ -296,56 +268,6 @@ export default function ProduceScanner() {
                   </div>
                 </TabsContent>
 
-                {/* QR Scan Tab */}
-                <TabsContent value="qr" className="mt-4 space-y-4">
-                  {!isQrScanning && !qrDetected && (
-                    <div className="text-center py-8">
-                      <div className="w-20 h-20 mx-auto mb-4 rounded-2xl bg-primary/10 flex items-center justify-center">
-                        <QrCode className="w-10 h-10 text-primary" />
-                      </div>
-                      <p className="text-muted-foreground mb-4">
-                        Scan product QR code to auto-detect produce type
-                      </p>
-                      <Button onClick={startQrScanning}>
-                        <Camera className="w-4 h-4 mr-2" />
-                        Start QR Scanner
-                      </Button>
-                    </div>
-                  )}
-                  
-                  {isQrScanning && (
-                    <div className="space-y-4">
-                      <div 
-                        id="qr-reader-produce" 
-                        className="w-full rounded-lg overflow-hidden bg-black"
-                        style={{ minHeight: '250px' }}
-                      />
-                      <Button 
-                        variant="destructive" 
-                        onClick={stopQrScanning}
-                        className="w-full"
-                      >
-                        <X className="w-4 h-4 mr-2" />
-                        Stop Scanning
-                      </Button>
-                    </div>
-                  )}
-
-                  {qrDetected && (
-                    <div className="space-y-4">
-                      <div className="bg-success/10 border border-success/30 rounded-lg p-4 text-center">
-                        <QrCode className="h-8 w-8 text-success mx-auto mb-2" />
-                        <p className="text-sm font-medium text-success">QR Code Detected!</p>
-                        <p className="text-xs text-muted-foreground mt-1 break-all">{qrDetected}</p>
-                      </div>
-                      <Button variant="outline" onClick={() => { setQrDetected(null); startQrScanning(); }} className="w-full">
-                        <QrCode className="w-4 h-4 mr-2" />
-                        Scan Another
-                      </Button>
-                    </div>
-                  )}
-                </TabsContent>
-
                 {/* Upload Tab */}
                 <TabsContent value="upload" className="mt-4 space-y-4">
                   <input
@@ -392,7 +314,7 @@ export default function ProduceScanner() {
             <CardHeader className="bg-primary/5">
               <CardTitle className="flex items-center gap-2">
                 <Leaf className="h-5 w-5" />
-                Storage Conditions
+                Select Produce
               </CardTitle>
             </CardHeader>
             <CardContent className="p-4 space-y-5">
@@ -419,218 +341,95 @@ export default function ProduceScanner() {
                 </Select>
               </div>
 
-              {/* Temperature */}
-              <div className="space-y-2">
-                <Label className="flex items-center justify-between">
-                  <span className="flex items-center gap-2">
-                    <Thermometer className="h-4 w-4 text-orange-500" />
-                    Temperature
-                  </span>
-                  <Badge variant="outline">{conditions.temperature}°C</Badge>
-                </Label>
-                <Slider
-                  value={[conditions.temperature]}
-                  onValueChange={([v]) => setConditions(c => ({ ...c, temperature: v }))}
-                  min={-5}
-                  max={40}
-                  step={1}
-                  className="py-2"
-                />
-              </div>
-
-              {/* Humidity */}
-              <div className="space-y-2">
-                <Label className="flex items-center justify-between">
-                  <span className="flex items-center gap-2">
-                    <Droplets className="h-4 w-4 text-blue-500" />
-                    Humidity
-                  </span>
-                  <Badge variant="outline">{conditions.humidity}%</Badge>
-                </Label>
-                <Slider
-                  value={[conditions.humidity]}
-                  onValueChange={([v]) => setConditions(c => ({ ...c, humidity: v }))}
-                  min={20}
-                  max={100}
-                  step={5}
-                  className="py-2"
-                />
-              </div>
-
-              {/* Packaging */}
-              <div className="space-y-2">
-                <Label className="flex items-center gap-2">
-                  <Package className="h-4 w-4 text-purple-500" />
-                  Packaging
-                </Label>
-                <Select
-                  value={conditions.packaging}
-                  onValueChange={(v) => setConditions(c => ({ ...c, packaging: v as StorageConditions['packaging'] }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">No Packaging</SelectItem>
-                    <SelectItem value="plastic">Plastic Wrap</SelectItem>
-                    <SelectItem value="paper">Paper Bag</SelectItem>
-                    <SelectItem value="sealed">Sealed Container</SelectItem>
-                    <SelectItem value="refrigerated">Refrigerated</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Damage */}
-              <div className="space-y-2">
-                <Label className="flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4 text-yellow-500" />
-                  Physical Damage
-                </Label>
-                <Select
-                  value={conditions.damage}
-                  onValueChange={(v) => setConditions(c => ({ ...c, damage: v as StorageConditions['damage'] }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">No Damage</SelectItem>
-                    <SelectItem value="minor">Minor Bruising</SelectItem>
-                    <SelectItem value="moderate">Moderate Damage</SelectItem>
-                    <SelectItem value="severe">Severe Damage</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Ripeness */}
-              <div className="space-y-2">
-                <Label className="flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-green-500" />
-                  Ripeness
-                </Label>
-                <Select
-                  value={conditions.ripeness}
-                  onValueChange={(v) => setConditions(c => ({ ...c, ripeness: v as StorageConditions['ripeness'] }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="unripe">Unripe</SelectItem>
-                    <SelectItem value="ripe">Ripe</SelectItem>
-                    <SelectItem value="overripe">Overripe</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
+              {/* Predict Button */}
               <Button
                 onClick={calculatePrediction}
                 disabled={!selectedProduce}
                 className="w-full"
                 size="lg"
               >
-                <Calendar className="h-4 w-4 mr-2" />
-                Predict Rot Date
+                <Clock className="h-5 w-5 mr-2" />
+                Predict Expiry Date
               </Button>
+
+              {/* Info Note */}
+              <div className="bg-muted/50 rounded-lg p-3 text-sm text-muted-foreground">
+                <Info className="h-4 w-4 inline mr-2" />
+                Predictions are based on typical room temperature storage conditions.
+              </div>
             </CardContent>
           </Card>
         </div>
 
         {/* Prediction Results */}
         {prediction && (
-          <Card className="border-2 border-primary/20 overflow-hidden animate-in fade-in slide-in-from-bottom-4">
-            <CardHeader className="bg-gradient-to-r from-primary/10 to-primary/5">
-              <CardTitle className="flex items-center gap-2">
-                <Info className="h-5 w-5" />
-                Freshness Prediction Results
+          <Card className="border-2 border-primary/30 bg-gradient-to-br from-background to-primary/5">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-xl">
+                <Calendar className="h-6 w-6 text-primary" />
+                Freshness Prediction
               </CardTitle>
             </CardHeader>
-            <CardContent className="p-6">
-              <div className="grid md:grid-cols-3 gap-4 mb-6">
-                {/* Days Left */}
-                <div className={`rounded-xl p-6 text-center ${getDaysLeftColor(prediction.daysLeft)}`}>
-                  <div className="text-5xl font-bold mb-2">{prediction.daysLeft}</div>
-                  <div className="text-sm font-medium opacity-90">Days Until Spoilage</div>
+            <CardContent className="space-y-6">
+              {/* Main Stats */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="text-center p-4 rounded-xl bg-background border">
+                  <div className={`inline-flex items-center justify-center w-16 h-16 rounded-full ${getDaysLeftColor(prediction.daysLeft)} mb-2`}>
+                    <span className="text-2xl font-bold">{prediction.daysLeft}</span>
+                  </div>
+                  <p className="text-sm text-muted-foreground">Days Until Spoilage</p>
                 </div>
-
-                {/* Rot Date */}
-                <div className="rounded-xl p-6 text-center bg-muted">
-                  <div className="text-2xl font-bold mb-2 text-foreground">
-                    {format(prediction.rotDate, 'MMM dd, yyyy')}
+                <div className="text-center p-4 rounded-xl bg-background border">
+                  <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 text-primary mb-2">
+                    <Calendar className="h-8 w-8" />
                   </div>
-                  <div className="text-sm text-muted-foreground">Predicted Rot Date</div>
-                </div>
-
-                {/* Produce Info */}
-                <div className="rounded-xl p-6 text-center bg-primary/10">
-                  <div className="text-2xl font-bold mb-2 text-primary">
-                    {produceDatabase[selectedProduce]?.name}
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    Base: {produceDatabase[selectedProduce]?.baseShelfLife} days
-                  </div>
+                  <p className="font-semibold">{format(prediction.rotDate, 'MMM dd, yyyy')}</p>
+                  <p className="text-sm text-muted-foreground">Predicted Expiry</p>
                 </div>
               </div>
 
               {/* Explanation */}
-              <div className="bg-muted/50 rounded-lg p-4 mb-6">
+              <div className="bg-muted/30 rounded-lg p-4">
                 <h4 className="font-semibold mb-2 flex items-center gap-2">
-                  <Info className="h-4 w-4 text-primary" />
-                  Analysis Summary
+                  <Info className="h-4 w-4" />
+                  Analysis
                 </h4>
                 <p className="text-sm text-muted-foreground leading-relaxed">
                   {prediction.explanation}
                 </p>
               </div>
 
-              {/* Factor Breakdown */}
+              {/* Factors */}
               <div className="space-y-3">
-                <h4 className="font-semibold">Factor Breakdown</h4>
-                <div className="grid md:grid-cols-2 gap-3">
-                  <div className="flex items-start gap-3 p-3 bg-muted/30 rounded-lg">
-                    <Thermometer className="h-5 w-5 text-orange-500 mt-0.5" />
-                    <div>
-                      <div className="font-medium text-sm">Temperature</div>
-                      <div className="text-xs text-muted-foreground">{prediction.factors.temperatureImpact}</div>
+                <h4 className="font-semibold">Key Factors</h4>
+                <div className="grid gap-2">
+                  {prediction.factors.ethyleneNote && (
+                    <div className="flex items-start gap-2 text-sm p-2 rounded bg-warning/10 border border-warning/20">
+                      <Leaf className="h-4 w-4 text-warning mt-0.5 flex-shrink-0" />
+                      <span>{prediction.factors.ethyleneNote}</span>
                     </div>
-                  </div>
-                  <div className="flex items-start gap-3 p-3 bg-muted/30 rounded-lg">
-                    <Droplets className="h-5 w-5 text-blue-500 mt-0.5" />
-                    <div>
-                      <div className="font-medium text-sm">Humidity</div>
-                      <div className="text-xs text-muted-foreground">{prediction.factors.humidityImpact}</div>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3 p-3 bg-muted/30 rounded-lg">
-                    <Package className="h-5 w-5 text-purple-500 mt-0.5" />
-                    <div>
-                      <div className="font-medium text-sm">Packaging</div>
-                      <div className="text-xs text-muted-foreground">{prediction.factors.packagingImpact}</div>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3 p-3 bg-muted/30 rounded-lg">
-                    <AlertTriangle className="h-5 w-5 text-yellow-500 mt-0.5" />
-                    <div>
-                      <div className="font-medium text-sm">Physical Damage</div>
-                      <div className="text-xs text-muted-foreground">{prediction.factors.damageImpact}</div>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3 p-3 bg-muted/30 rounded-lg">
-                    <Clock className="h-5 w-5 text-green-500 mt-0.5" />
-                    <div>
-                      <div className="font-medium text-sm">Ripeness</div>
-                      <div className="text-xs text-muted-foreground">{prediction.factors.ripenessImpact}</div>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3 p-3 bg-muted/30 rounded-lg">
-                    <Leaf className="h-5 w-5 text-primary mt-0.5" />
-                    <div>
-                      <div className="font-medium text-sm">Ethylene</div>
-                      <div className="text-xs text-muted-foreground">{prediction.factors.ethyleneNote}</div>
-                    </div>
+                  )}
+                  <div className="text-xs text-muted-foreground p-2 rounded bg-muted/30">
+                    Based on room temperature (~20°C) and average humidity (~60%) storage conditions.
                   </div>
                 </div>
               </div>
+
+              {/* Notification Reminder */}
+              {!notificationsEnabled && prediction.daysLeft <= 5 && (
+                <div className="bg-primary/10 border border-primary/20 rounded-lg p-4">
+                  <div className="flex items-center gap-3">
+                    <Bell className="h-5 w-5 text-primary" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">Enable notifications to get expiry reminders</p>
+                      <p className="text-xs text-muted-foreground">We'll remind you before your produce spoils</p>
+                    </div>
+                    <Button size="sm" onClick={enableNotifications}>
+                      Enable
+                    </Button>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}

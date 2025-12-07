@@ -32,8 +32,10 @@ export default function ProduceScanner() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
-  // Cleanup on unmount
+  // Auto-start camera on mount
   useEffect(() => {
+    startCamera();
+    
     return () => {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());

@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { Camera, Leaf, Clock, Calendar, Info, X, ScanLine, Upload, ImageIcon, Bell } from 'lucide-react';
+import { Camera, Leaf, Clock, Calendar, Info, X, ScanLine, Upload, ImageIcon, Bell, Save, CheckCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { produceDatabase, predictRotDate, RotPrediction } from '@/utils/rotPrediction';
 import { requestNotificationPermission, showNotification } from '@/utils/notifications';
+import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 
 // Default storage conditions for automatic prediction
@@ -26,6 +27,8 @@ export default function ProduceScanner() {
   const [selectedProduce, setSelectedProduce] = useState<string>('');
   const [prediction, setPrediction] = useState<RotPrediction | null>(null);
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -125,6 +128,53 @@ export default function ProduceScanner() {
     setCapturedImage(null);
     setPrediction(null);
     setSelectedProduce('');
+    setIsSaved(false);
+  };
+
+  const saveToInventory = async () => {
+    if (!prediction || !selectedProduce) return;
+
+    setIsSaving(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        toast({
+          title: 'Login Required',
+          description: 'Please log in to save items to your inventory.',
+          variant: 'destructive',
+        });
+        setIsSaving(false);
+        return;
+      }
+
+      const produce = produceDatabase[selectedProduce];
+      const { error } = await supabase.from('food_items').insert({
+        name: produce.name,
+        category: 'Produce',
+        purchase_date: new Date().toISOString().split('T')[0],
+        expiry_date: prediction.rotDate.toISOString().split('T')[0],
+        user_id: user.id,
+        notes: `Predicted via Freshness Scanner. ${prediction.explanation}`,
+      });
+
+      if (error) throw error;
+
+      setIsSaved(true);
+      toast({
+        title: 'Saved to Inventory!',
+        description: `${produce.name} added with expiry date ${format(prediction.rotDate, 'MMM dd, yyyy')}`,
+      });
+    } catch (error) {
+      console.error('Save error:', error);
+      toast({
+        title: 'Save Failed',
+        description: 'Unable to save item to inventory.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const calculatePrediction = () => {
@@ -413,6 +463,26 @@ export default function ProduceScanner() {
                     Based on room temperature (~20°C) and average humidity (~60%) storage conditions.
                   </div>
                 </div>
+              </div>
+
+              {/* Save to Inventory Button */}
+              <div className="pt-2">
+                {isSaved ? (
+                  <Button disabled className="w-full" size="lg" variant="outline">
+                    <CheckCircle className="h-5 w-5 mr-2 text-green-500" />
+                    Saved to Inventory
+                  </Button>
+                ) : (
+                  <Button 
+                    onClick={saveToInventory} 
+                    disabled={isSaving}
+                    className="w-full" 
+                    size="lg"
+                  >
+                    <Save className="h-5 w-5 mr-2" />
+                    {isSaving ? 'Saving...' : 'Save to Inventory'}
+                  </Button>
+                )}
               </div>
 
               {/* Notification Reminder */}
